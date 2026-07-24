@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "201514391230",
+    "project_id": "choi-calendar",
+    "storage_bucket": "choi-calendar.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:201514391230:android:4024ad06d861d4f47c30ef",
+        "android_client_info": {
+          "package_name": "com.choimedia.calendarapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDBz7mHz1dK6OJ0JRuWd87OepVhLGG2ZDw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

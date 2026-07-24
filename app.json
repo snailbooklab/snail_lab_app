@@ -1,0 +1,61 @@
+{
+  "expo": {
+    "name": "최미선 캘린더",
+    "slug": "choi-media-calendar-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.choimedia.calendarapp"
+    },
+    "android": {
+      "package": "com.choimedia.calendarapp",
+      "adaptiveIcon": {
+        "backgroundColor": "#F3F0EE",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-foreground.png",
+          "color": "#1f1b16"
+        }
+      ],
+      "./plugins/withLockScreenWidgetCategory",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "TodaySchedule",
+              "label": "오늘 일정",
+              "description": "오늘 등록된 일정을 한눈에 보여줍니다.",
+              "minWidth": "180dp",
+              "minHeight": "80dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e8331649-de8b-4270-9d99-ba1ff3ad4e9e"
+      }
+    },
+    "owner": "jkwondo"
+  }
+}

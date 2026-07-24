@@ -1,0 +1,58 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+# .env는 공개 값(Supabase anon key, 인제스트 URL)만 담는다 — 커밋해도 안전하고,
+# EAS Build는 git에 없는 파일은 안 가져가서 커밋 안 하면 앱이 시작하자마자 죽는다.
+#
+# 비밀 값(EXPO_PUBLIC_INGEST_SECRET 등)은 .env가 아니라:
+#   로컬 → .env.local (아래 규칙으로 무시됨)
+#   빌드 → eas env:set (EAS 서버에 저장, 빌드 시 주입)
+.env*.local
+
+# Firebase 서비스 계정 private key — 절대 커밋 금지 (google-services.json은 비밀 아님, 커밋해도 됨)
+firebase-service-account*.json
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+
+# local expo module 빌드 산출물 (modules/*/android/build 등)
+build/
+.gradle/
+
+# IDE
+.idea/
+.vscode/
