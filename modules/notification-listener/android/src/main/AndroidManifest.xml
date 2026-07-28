@@ -1,0 +1,17 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!--
+      알림 접근 서비스. 시스템이 바인딩하므로 exported="true"여야 하고, BIND_NOTIFICATION_LISTENER_SERVICE
+      권한을 요구해 시스템만 바인딩할 수 있게 막는다. 사용자가 "설정 > 알림 접근"에서 직접 켜야 동작한다.
+    -->
+    <service
+      android:name="expo.modules.notificationlistener.LectureNotificationListener"
+      android:label="강의 문의 감지"
+      android:exported="true"
+      android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+      <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService" />
+      </intent-filter>
+    </service>
+  </application>
+</manifest>
