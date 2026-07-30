@@ -1,7 +1,7 @@
 // choi-media 웹의 app/admin/calendar/_hooks/schedules.ts와 동일한 react-query 훅 구조.
 // 차이점: 성공 시 기기 쪽 파생 상태(로컬 알림 + 홈/잠금화면 위젯)도 함께 맞춘다(resyncDevice).
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createRecurringSchedules,
   createSchedule,
@@ -12,11 +12,19 @@ import {
 import { resyncDevice } from "../lib/resync";
 import type { RecurringScheduleInput, ScheduleInput, ScheduleItem } from "../types";
 
-export function useSchedules(range: { from: string; to: string }, options?: { enabled?: boolean }) {
+export function useSchedules(
+  range: { from: string; to: string },
+  options?: {
+    enabled?: boolean;
+    /** 범위가 바뀌어 새로 받아오는 동안 직전 범위의 데이터를 그대로 들고 있는다(빈 화면 방지). */
+    keepPrevious?: boolean;
+  },
+) {
   return useQuery({
     queryKey: ["schedules", range.from, range.to],
     queryFn: () => getSchedules(range),
     enabled: options?.enabled ?? true,
+    placeholderData: options?.keepPrevious ? keepPreviousData : undefined,
   });
 }
 

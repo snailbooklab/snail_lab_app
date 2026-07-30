@@ -84,7 +84,7 @@ export default function CalendarScreen({
   onOpenNotificationAccess?: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const today = useMemo(() => new Date(), []);
 
   // 오늘에서 EARLIEST_YEAR/MONTH까지 몇 달을 거슬러 올라가야 하는지 = 과거 쪽 페이지 수.
@@ -114,33 +114,12 @@ export default function CalendarScreen({
   // 빠르게 연달아 스와이프하면 그냥 스쳐 지나가는 페이지도 pageIndex가 잠깐씩 그 값을 거쳐간다 —
   // 아직 캐시가 없는 페이지까지 매번 fetch를 쏘면 낭비이므로, 이 값에 최소 200ms는 머물러야
   // ("정착") 새 요청을 허용한다. 이미 캐시된 페이지는 정착을 기다릴 필요 없이 즉시 보여준다 —
-  // 아래 currentFrom/To의 enabled 계산과 MonthPageView 둘 다 이 정착 인덱스를 참고한다.
+  // MonthPageView가 이 정착 인덱스를 참고한다.
   const [settledPageIndex, setSettledPageIndex] = useState(pageIndex);
   useEffect(() => {
     const timer = setTimeout(() => setSettledPageIndex(pageIndex), 200);
     return () => clearTimeout(timer);
   }, [pageIndex]);
-
-  // 현재 페이지(달) 일정 — 날짜 상세 모달용. 같은 범위를 MonthPageView도 자기 칩 표시를 위해
-  // 조회하는데, react-query가 같은 쿼리키를 캐시/구독 공유하므로 여기서 한 번 더 불러도 요청이
-  // 중복으로 나가지는 않는다. 이미 캐시돼 있으면 정착을 기다리지 않고 바로 활성화한다.
-  const currentFrom = toISO(currentPage.grid[0]);
-  const currentTo = toISO(currentPage.grid[currentPage.grid.length - 1]);
-  const qc = useQueryClient();
-  const hasCurrentCache = qc.getQueryData(["schedules", currentFrom, currentTo]) !== undefined;
-  const { data: currentMonthData } = useSchedules(
-    { from: currentFrom, to: currentTo },
-    { enabled: hasCurrentCache || pageIndex === settledPageIndex },
-  );
-  const byDate = useMemo(() => {
-    const map = new Map<string, ScheduleItem[]>();
-    for (const s of currentMonthData ?? []) {
-      const list = map.get(s.date) ?? [];
-      list.push(s);
-      map.set(s.date, list);
-    }
-    return map;
-  }, [currentMonthData]);
 
   // 네비게이션 바 영역은 위쪽 펀치홀 카메라 여백(header의 insets.top)과 똑같이, 화면 전체
   // 컨테이너에 고정 여백으로만 반영한다 — 달력 페이지 높이 자체를 계산해서 빼면 스와이프로
@@ -193,21 +172,47 @@ export default function CalendarScreen({
       const canPrev = startIndex > 0;
       const commitNext = canNext && (e.translationY < -gridHeight * 0.25 || e.velocityY < -800);
       const commitPrev = canPrev && (e.translationY > gridHeight * 0.25 || e.velocityY > 800);
-      if (commitNext) {
-        scrollY.value = withTiming((startIndex + 1) * gridHeight, { duration: 220 });
-        runOnJS(commitPageIndex)(1);
-      } else if (commitPrev) {
-        scrollY.value = withTiming((startIndex - 1) * gridHeight, { duration: 220 });
-        runOnJS(commitPageIndex)(-1);
-      } else {
-        scrollY.value = withTiming(startIndex * gridHeight, { duration: 220 });
-      }
+      // 화면이 멈출 자리(target)를 먼저 정하고, pageIndex도 그 절대값으로 맞춘다 — 예전엔
+      // 화면은 startIndex 기준 절대 위치로, pageIndex는 JS state 기준 상대 증감(+1/-1)으로
+      // 따로 계산해서, 애니메이션 도중에 새 드래그가 시작되면(빠른 연속 스와이프, 또는 넘어가는
+      // 중에 살짝 건드렸다 떼기) 둘이 다른 달을 가리킬 수 있었다. 그러면 화면엔 A월이 보이는데
+      // pageIndex는 B월이라, 보이는 칩을 눌러도 상세엔 아무것도 없는 것처럼 보였다.
+      const target = commitNext ? startIndex + 1 : commitPrev ? startIndex - 1 : startIndex;
+      scrollY.value = withTiming(target * gridHeight, { duration: 220 });
+      runOnJS(commitPageIndex)(target);
     });
   const monthListAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -scrollY.value }],
   }));
 
   const [selected, setSelected] = useState(toISO(today));
+  const [selYear, selMonth, selDay] = selected.split("-").map(Number);
+
+  // 날짜 상세 시트에 보여줄 일정 — "지금 보고 있는 달"이 아니라 "선택된 날짜가 속한 달"의 그리드
+  // 범위로 조회한다. 예전엔 현재 페이지(pageIndex) 범위를 썼는데, 그러면 pageIndex와 화면에 실제로
+  // 보이는 달이 어긋난 순간(월 스와이프 애니메이션 중에 아직 남아있는 이전 달의 날짜를 누르는 경우
+  // 등)에 누른 날짜가 조회 범위 밖이 되어, 달력엔 칩이 떠 있는데 상세는 "등록된 일정이 없습니다"로
+  // 나오는 버그가 있었다. selected를 기준으로 잡으면 무슨 일이 있어도 둘이 어긋날 수 없다.
+  // 같은 범위를 MonthPageView도 자기 칩 표시를 위해 조회하지만, react-query가 같은 쿼리키의
+  // 캐시/구독을 공유하므로 요청이 중복으로 나가지는 않는다.
+  // keepPrevious: 상세를 좌우로 넘기다 달 경계를 넘으면 조회 범위가 바뀌는데, 그 사이 data가
+  // undefined가 되면 방금 넘어온 날짜의 일정이 잠깐 사라진다. 직전 범위 데이터를 들고 있으면
+  // (그리드가 앞뒤 달 며칠씩을 포함하므로) 대개 그대로 이어서 보인다.
+  const selectedPage = pageMonths[pageIndexOf(selYear, selMonth - 1) ?? pageIndex];
+  const { data: selectedRangeData } = useSchedules(
+    { from: toISO(selectedPage.grid[0]), to: toISO(selectedPage.grid[selectedPage.grid.length - 1]) },
+    { keepPrevious: true },
+  );
+  const byDate = useMemo(() => {
+    const map = new Map<string, ScheduleItem[]>();
+    for (const s of selectedRangeData ?? []) {
+      const list = map.get(s.date) ?? [];
+      list.push(s);
+      map.set(s.date, list);
+    }
+    return map;
+  }, [selectedRangeData]);
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ScheduleItem | null>(null);
   const [title, setTitle] = useState("");
@@ -260,9 +265,13 @@ export default function CalendarScreen({
     opacity: interpolate(panY.value, [0, windowHeight * 0.85], [1, 0], Extrapolation.CLAMP),
   }));
 
+  // 상세 목록을 좌우로 넘길 때의 가로 오프셋(아래 daySwipeGesture). 시트를 새로 열거나
+  // 폼↔목록을 오갈 때는 반드시 0에서 시작해야 한다 — 넘기는 도중 닫으면 값이 남는다.
+  const dayShiftX = useSharedValue(0);
   useEffect(() => {
     if (dialogOpen) panY.value = 0;
-  }, [dialogOpen, panY]);
+    dayShiftX.value = 0;
+  }, [dialogOpen, panY, dayShiftX]);
 
   // 키보드가 시트를 덮는 높이 — 폼 ScrollView 아래쪽에 이만큼 여백을 줘서, 키보드에 가린 항목
   // (알림·반복 옵션, 추가/취소 버튼)을 스크롤해 올려 볼 수 있게 한다.
@@ -291,10 +300,10 @@ export default function CalendarScreen({
   }
 
   // 스와이프 커밋 전용 — 화면 위치는 제스처의 onEnd에서 이미 처리했으므로 여기서는 논리적인
-  // pageIndex(헤더 제목/데이터 페칭용)만 갱신한다. 함수형 업데이트라서 빠르게 연속으로
-  // 커밋되어도(runOnJS 호출 순서만 보장되면) 순서대로 정확히 누적된다.
-  function commitPageIndex(offset: number) {
-    setPageIndex((i) => Math.min(Math.max(i + offset, 0), pageMonths.length - 1));
+  // pageIndex(헤더 제목/데이터 페칭용)만, 화면이 멈출 자리와 같은 절대 인덱스로 맞춘다.
+  // (상대 증감이 아니라 절대값이라야 화면 위치 scrollY와 절대 어긋나지 않는다 — onEnd 주석 참고.)
+  function commitPageIndex(index: number) {
+    setPageIndex(Math.min(Math.max(index, 0), pageMonths.length - 1));
   }
 
   function goToToday() {
@@ -376,6 +385,9 @@ export default function CalendarScreen({
   // 시트는 "목록 보기"와 "추가/수정 폼" 두 화면을 번갈아 보여준다 — 날짜를 누르면
   // 항상 기존 일정 목록이 꽉 차게 먼저 보이고, "+ 일정 추가"나 "수정"을 눌러야 폼으로 넘어간다.
   const [formOpen, setFormOpen] = useState(false);
+  useEffect(() => {
+    dayShiftX.value = 0;
+  }, [formOpen, dayShiftX]);
 
   function openDay(iso: string) {
     setSelected(iso);
@@ -473,7 +485,6 @@ export default function CalendarScreen({
     { length: today.getFullYear() + 3 - EARLIEST_YEAR + 1 },
     (_, i) => EARLIEST_YEAR + i,
   );
-  const [selYear, selMonth, selDay] = selected.split("-").map(Number);
   const daysInSelMonth = new Date(selYear, selMonth, 0).getDate();
   function setDatePart(part: { y?: number; m?: number; d?: number }) {
     const y = part.y ?? selYear;
@@ -496,6 +507,57 @@ export default function CalendarScreen({
     const iso = `${y}-${pad(m)}-${pad(d)}`;
     setRepeatUntil(iso < selected ? selected : iso);
   }
+
+  // ── 상세 시트 좌우 스와이프로 전날/다음날 보기 ───────────────────────────────
+  // 시트를 내렸다가 다른 날짜를 다시 누르지 않아도 앞뒤 날짜를 훑을 수 있게 한다.
+  /** selected에서 delta일 이동한 날짜와, 그 날짜가 속한 달력 페이지 인덱스(범위 밖이면 null). */
+  function dayShift(delta: number) {
+    const d = new Date(selYear, selMonth - 1, selDay + delta);
+    return { iso: toISO(d), page: pageIndexOf(d.getFullYear(), d.getMonth()) };
+  }
+  const canPrevDay = dayShift(-1).page !== null;
+  const canNextDay = dayShift(1).page !== null;
+
+  function shiftSelectedDay(delta: number) {
+    const { iso, page } = dayShift(delta);
+    if (page === null) return; // 달력 범위(2024년 1월 ~ 오늘+6개월) 밖
+    setSelected(iso);
+    // 달이 바뀌면 뒤에 깔린 달력도 같이 넘긴다 — 시트를 닫았을 때 방금 보던 날짜가 있는 달이
+    // 떠 있어야 하고, 상세 목록이 참조하는 일정 데이터도 현재 페이지 기준으로 받아오기 때문이다.
+    if (page !== pageIndex) {
+      setPageIndex(page);
+      scrollY.value = page * gridHeight;
+    }
+  }
+
+  const daySwipeGesture = Gesture.Pan()
+    // 세로로 먼저 움직이면(목록 스크롤·시트 내리기) 이 제스처는 실패시켜 넘겨준다.
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-14, 14])
+    .onUpdate((e) => {
+      // 더 갈 곳이 없는 방향은 고무줄처럼 조금만 끌리게 해서 끝이라는 걸 손끝으로 알린다.
+      const blocked = (e.translationX > 0 && !canPrevDay) || (e.translationX < 0 && !canNextDay);
+      dayShiftX.value = blocked ? e.translationX * 0.2 : e.translationX;
+    })
+    .onEnd((e) => {
+      const dir = e.translationX < 0 ? 1 : -1; // 왼쪽으로 밀면 다음 날
+      const allowed = dir === 1 ? canNextDay : canPrevDay;
+      if (!allowed || (Math.abs(e.translationX) < windowWidth * 0.22 && Math.abs(e.velocityX) < 700)) {
+        dayShiftX.value = withTiming(0, { duration: 160 });
+        return;
+      }
+      // 현재 목록을 밀어낸 뒤(화면 밖) 날짜를 바꾸고, 반대편에서 새 목록이 들어오게 한다 —
+      // 화면에 보이는 동안 내용이 바뀌지 않아서 깜빡임 없이 "넘어간" 것처럼 보인다.
+      dayShiftX.value = withTiming(-dir * windowWidth, { duration: 130 }, (finished) => {
+        if (!finished) return;
+        runOnJS(shiftSelectedDay)(dir);
+        dayShiftX.value = dir * windowWidth;
+        dayShiftX.value = withTiming(0, { duration: 200 });
+      });
+    });
+  const daySwipeAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: dayShiftX.value }],
+  }));
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>
@@ -916,7 +978,10 @@ export default function CalendarScreen({
                 </View>
               </>
             ) : (
-              <>
+              // 목록 화면은 좌우로 밀어 전날/다음날 상세로 넘길 수 있다 — 시트를 내렸다 다시
+              // 열지 않아도 되도록. 세로 스크롤(목록)과는 activeOffsetX/failOffsetY로 갈린다.
+              <GestureDetector gesture={daySwipeGesture}>
+                <Animated.View style={[styles.daySwipeArea, daySwipeAnimatedStyle]}>
                 <ScrollView
                   ref={eventListRef}
                   style={styles.sheetScroll}
@@ -998,7 +1063,8 @@ export default function CalendarScreen({
                     <Text style={styles.submitBtnText}>+ 일정 추가</Text>
                   </Pressable>
                 </View>
-              </>
+                </Animated.View>
+              </GestureDetector>
             )}
           </Animated.View>
         </View>
@@ -1411,8 +1477,12 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     paddingTop: 8,
     paddingHorizontal: 24,
+    // 좌우 스와이프로 날짜를 넘길 때 밀려나는 목록이 시트 밖으로 삐져나오지 않게.
+    overflow: "hidden",
   },
   sheetScroll: { flex: 1 },
+  // 목록+"일정 추가" 버튼을 통째로 좌우로 미는 영역(전날/다음날 스와이프).
+  daySwipeArea: { flex: 1 },
   sheetHandle: { alignSelf: "center", width: 44, height: 5, borderRadius: 3, backgroundColor: "#e3d6b8", marginTop: 6, marginBottom: 14 },
   sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
   sheetTitle: { fontSize: 22, fontWeight: "800", color: "#1f1b16", letterSpacing: -0.3 },
