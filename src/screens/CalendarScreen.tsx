@@ -51,6 +51,7 @@ import { getScheduledAlarms, type ScheduledAlarm } from "../lib/notifications";
 import { supabase } from "../lib/supabase";
 import type { ScheduleItem } from "../types";
 import PhotoImportSheet from "./PhotoImportSheet";
+import SearchSheet from "./SearchSheet";
 
 // 일정 칩 — 선명한 강조색 팔레트. 배경은 연하게, 왼쪽 보더/텍스트는 진하게 대비.
 const CHIP_COLORS = [
@@ -433,6 +434,19 @@ export default function CalendarScreen({
     }
   }
 
+  // 일정 검색 — 결과를 누르면 그 날짜로 달력을 옮기고 상세 시트를 연다.
+  const [searchOpen, setSearchOpen] = useState(false);
+  function onSearchPick(iso: string) {
+    setSearchOpen(false);
+    const [y, m] = iso.split("-").map(Number);
+    const page = pageIndexOf(y, m - 1);
+    if (page !== null && page !== pageIndex) {
+      setPageIndex(page);
+      scrollY.value = page * gridHeight;
+    }
+    openDay(iso);
+  }
+
   // 실기기에서 "지금 OS에 실제로 예약된 로컬알람"을 눈으로 확인하는 디버그 뷰 — FAB를 길게 누르면 뜬다.
   const [alarmsOpen, setAlarmsOpen] = useState(false);
   const [scheduledAlarms, setScheduledAlarms] = useState<ScheduledAlarm[]>([]);
@@ -600,6 +614,16 @@ export default function CalendarScreen({
           </Pressable>
         </View>
         <View style={styles.headerRight}>
+          <Pressable
+            onPress={() => setSearchOpen(true)}
+            style={styles.iconBtn}
+            hitSlop={4}
+            android_ripple={{ color: "#f6e9d1", borderless: false }}
+            accessibilityRole="button"
+            accessibilityLabel="일정 검색"
+          >
+            <Text style={styles.iconBtnText}>🔍</Text>
+          </Pressable>
           <Pressable
             onPress={goToToday}
             style={styles.todayPill}
@@ -1267,6 +1291,7 @@ export default function CalendarScreen({
       </Modal>
 
       <PhotoImportSheet visible={photoOpen} onClose={() => setPhotoOpen(false)} onSaved={onPhotoSaved} defaultDate={selected} />
+      <SearchSheet visible={searchOpen} onClose={() => setSearchOpen(false)} onPick={onSearchPick} />
     </View>
   );
 }

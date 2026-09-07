@@ -7,6 +7,7 @@ import {
   createSchedule,
   createSchedulesBulk,
   deleteSchedule,
+  getAllSchedules,
   getSchedules,
   updateSchedule,
 } from "../api/schedules";
@@ -26,6 +27,16 @@ export function useSchedules(
     queryFn: () => getSchedules(range),
     enabled: options?.enabled ?? true,
     placeholderData: options?.keepPrevious ? keepPreviousData : undefined,
+  });
+}
+
+/** 검색용 전체 목록. 키가 ["schedules", …] 접두를 공유하므로 추가·수정·삭제 뒤의 무효화가 그대로 먹는다. */
+export function useAllSchedules(enabled: boolean) {
+  return useQuery({
+    queryKey: ["schedules", "all"],
+    queryFn: getAllSchedules,
+    enabled,
+    staleTime: 60_000,
   });
 }
 

@@ -15,6 +15,24 @@ export async function getSchedules(range?: { from: string; to: string }): Promis
   return data ?? [];
 }
 
+/** 검색용 — 기간 제한 없이 전부. Supabase는 요청당 1,000행까지만 주므로 range로 나눠 받는다. */
+export async function getAllSchedules(): Promise<ScheduleItem[]> {
+  const PAGE = 1000;
+  const all: ScheduleItem[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await supabase
+      .from("schedules")
+      .select("id, date, title, memo, remind_at, created_at")
+      .order("date", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw new Error(error.message);
+    all.push(...(data ?? []));
+    if (!data || data.length < PAGE) break;
+  }
+  return all;
+}
+
 /** 알림 동기화용 — 지금부터 7일 이내의 remind_at만(달력에 보이는 월 범위와 무관).
  *  1년치를 한꺼번에 로컬알람으로 등록하지 않고 "가까운 일주일치"만 등록한다. 앱을 열거나
  *  일정이 바뀔 때마다(App.tsx 포그라운드 재동기화 / FCM 백그라운드 태스크) 현재 시점 기준으로
