@@ -37,7 +37,6 @@ type DraftRow = {
   include: boolean;
   date: string; // "" = 아직 없음
   title: string;
-  time: string;
   memo: string;
   confidence: DraftConfidence | "manual";
 };
@@ -58,7 +57,6 @@ function rowsFromExtraction(events: DraftEvent[]): DraftRow[] {
     include: !!e.date,
     date: e.date ?? "",
     title: e.title,
-    time: e.time ?? "",
     memo: e.memo ?? "",
     confidence: e.confidence,
   }));
@@ -159,7 +157,7 @@ export default function PhotoImportSheet({
   function addRow() {
     setRows((prev) => [
       ...prev,
-      { key: nextKey++, include: true, date: defaultDate, title: "", time: "", memo: "", confidence: "manual" },
+      { key: nextKey++, include: true, date: defaultDate, title: "", memo: "", confidence: "manual" },
     ]);
   }
 
@@ -173,7 +171,7 @@ export default function PhotoImportSheet({
         ready.map((r) => ({
           date: r.date,
           title: r.title.trim(),
-          memo: [r.time.trim(), r.memo.trim()].filter(Boolean).join(" · ") || undefined,
+          memo: r.memo.trim() || undefined,
           remindAt: remindEnabled ? reminderIsoFor(r.date, remindHour, remindMinute) : null,
         })),
       );
@@ -331,26 +329,17 @@ export default function PhotoImportSheet({
                     <TextInput
                       value={r.title}
                       onChangeText={(v) => patchRow(r.key, { title: v })}
-                      placeholder="제목"
+                      placeholder="제목 (예: 10:00 ○○초 강의)"
                       placeholderTextColor="#b7ab94"
                       style={[styles.input, styles.titleInput]}
                     />
-                    <View style={styles.inline}>
-                      <TextInput
-                        value={r.time}
-                        onChangeText={(v) => patchRow(r.key, { time: v })}
-                        placeholder="시간 (선택)"
-                        placeholderTextColor="#b7ab94"
-                        style={[styles.input, styles.smallInput, { flex: 1 }]}
-                      />
-                      <TextInput
-                        value={r.memo}
-                        onChangeText={(v) => patchRow(r.key, { memo: v })}
-                        placeholder="메모 (선택)"
-                        placeholderTextColor="#b7ab94"
-                        style={[styles.input, styles.smallInput, { flex: 2 }]}
-                      />
-                    </View>
+                    <TextInput
+                      value={r.memo}
+                      onChangeText={(v) => patchRow(r.key, { memo: v })}
+                      placeholder="메모 (선택)"
+                      placeholderTextColor="#b7ab94"
+                      style={[styles.input, styles.smallInput]}
+                    />
                     <View style={styles.cardBottom}>
                       {invalid ? (
                         <Text style={styles.invalidText}>날짜와 제목을 채워야 등록돼요. (빼려면 체크 해제)</Text>

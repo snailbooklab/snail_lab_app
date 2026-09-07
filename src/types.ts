@@ -98,8 +98,7 @@ export type DraftConfidence = "high" | "medium" | "low";
 
 export type DraftEvent = {
   date: string | null; // YYYY-MM-DD — 못 읽었으면 null
-  title: string;
-  time: string | null; // "HH:mm" 또는 "HH:mm~HH:mm"
+  title: string; // 시각이 있으면 "10:00 ○○초 강의"처럼 제목 앞에 붙어서 온다
   memo: string | null;
   confidence: DraftConfidence;
 };
