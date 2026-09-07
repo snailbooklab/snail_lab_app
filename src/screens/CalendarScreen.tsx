@@ -50,6 +50,7 @@ import { useUnhandledCount } from "../hooks/notifications";
 import { getScheduledAlarms, type ScheduledAlarm } from "../lib/notifications";
 import { supabase } from "../lib/supabase";
 import type { ScheduleItem } from "../types";
+import PhotoImportSheet from "./PhotoImportSheet";
 
 // 일정 칩 — 선명한 강조색 팔레트. 배경은 연하게, 왼쪽 보더/텍스트는 진하게 대비.
 const CHIP_COLORS = [
@@ -415,6 +416,21 @@ export default function CalendarScreen({
     startCreate();
     setFormOpen(true);
     setDialogOpen(true);
+  }
+
+  // 일정표 사진 → Claude 초안 → 확인 후 등록. 메뉴와 상세 시트의 📷 버튼에서 연다.
+  const [photoOpen, setPhotoOpen] = useState(false);
+  function onPhotoSaved(firstDate: string | null) {
+    setPhotoOpen(false);
+    if (!firstDate) return;
+    // 방금 등록한 첫 일정으로 달력을 옮겨 결과가 바로 보이게 한다.
+    const [y, m] = firstDate.split("-").map(Number);
+    const page = pageIndexOf(y, m - 1);
+    setSelected(firstDate);
+    if (page !== null && page !== pageIndex) {
+      setPageIndex(page);
+      scrollY.value = page * gridHeight;
+    }
   }
 
   // 실기기에서 "지금 OS에 실제로 예약된 로컬알람"을 눈으로 확인하는 디버그 뷰 — FAB를 길게 누르면 뜬다.
@@ -1054,13 +1070,23 @@ export default function CalendarScreen({
                   )}
                 </ScrollView>
 
-                <View style={[styles.formArea, { paddingBottom: 24 + insets.bottom }]}>
+                <View style={[styles.formArea, styles.footerRow, { paddingBottom: 24 + insets.bottom, marginTop: 8 }]}>
                   <Pressable
                     onPress={openAddForm}
-                    style={[styles.submitBtn, { flex: 0 }]}
+                    style={styles.submitBtn}
                     android_ripple={{ color: "#c2410c" }}
                   >
                     <Text style={styles.submitBtnText}>+ 일정 추가</Text>
+                  </Pressable>
+                  {/* 일정표 사진으로 여러 건을 한 번에 — 초안을 확인한 뒤에만 등록된다. */}
+                  <Pressable
+                    onPress={() => setPhotoOpen(true)}
+                    style={styles.photoBtn}
+                    android_ripple={{ color: "#ecdfc0" }}
+                    accessibilityRole="button"
+                    accessibilityLabel="사진으로 일정 추가"
+                  >
+                    <Text style={styles.photoBtnText}>📷</Text>
                   </Pressable>
                 </View>
                 </Animated.View>
@@ -1164,6 +1190,17 @@ export default function CalendarScreen({
             )}
           </Pressable>
           <View style={styles.menuDivider} />
+          <Pressable
+            onPress={() => {
+              setMenuOpen(false);
+              setPhotoOpen(true);
+            }}
+            style={styles.menuItem}
+            android_ripple={{ color: "#f6e9d1", borderless: false }}
+          >
+            <Text style={styles.menuItemText}>📷 사진으로 일정 추가</Text>
+          </Pressable>
+          <View style={styles.menuDivider} />
           {onOpenNotificationAccess && (
             <>
               <Pressable
@@ -1228,6 +1265,8 @@ export default function CalendarScreen({
           </Pressable>
         </View>
       </Modal>
+
+      <PhotoImportSheet visible={photoOpen} onClose={() => setPhotoOpen(false)} onSaved={onPhotoSaved} defaultDate={selected} />
     </View>
   );
 }
@@ -1555,5 +1594,7 @@ const styles = StyleSheet.create({
   submitBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   cancelBtn: { height: 52, paddingHorizontal: 20, borderRadius: 18, borderWidth: 1.5, borderColor: "#e6dcc6", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   cancelBtnText: { fontSize: 15, fontWeight: "600", color: "#1f1b16" },
+  photoBtn: { width: 52, height: 52, borderRadius: 18, borderWidth: 1.5, borderColor: "#e6dcc6", backgroundColor: "#fff", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  photoBtnText: { fontSize: 22 },
   buttonDisabled: { opacity: 0.45 },
 });

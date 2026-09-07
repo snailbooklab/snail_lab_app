@@ -5,12 +5,13 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import {
   createRecurringSchedules,
   createSchedule,
+  createSchedulesBulk,
   deleteSchedule,
   getSchedules,
   updateSchedule,
 } from "../api/schedules";
 import { resyncDevice } from "../lib/resync";
-import type { RecurringScheduleInput, ScheduleInput, ScheduleItem } from "../types";
+import type { BulkScheduleRow, RecurringScheduleInput, ScheduleInput, ScheduleItem } from "../types";
 
 export function useSchedules(
   range: { from: string; to: string },
@@ -80,6 +81,15 @@ export function useCreateRecurringSchedules() {
   const resync = useResync();
   return useMutation({
     mutationFn: (input: RecurringScheduleInput) => createRecurringSchedules(input),
+    onSuccess: resync,
+  });
+}
+
+/** 사진에서 읽은 초안처럼 제목이 제각각인 일정 여러 개를 한 번에 등록. 중복(날짜+제목)은 건너뛴다. */
+export function useCreateSchedulesBulk() {
+  const resync = useResync();
+  return useMutation({
+    mutationFn: (rows: BulkScheduleRow[]) => createSchedulesBulk(rows),
     onSuccess: resync,
   });
 }

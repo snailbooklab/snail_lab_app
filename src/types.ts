@@ -89,3 +89,33 @@ export type ScheduleFromEventInput = {
   /** ISO datetime. null이면 알림 없음. */
   remindAt: string | null;
 };
+
+// ---------------------------------------------------------------------------
+// 일정표 사진 → 일정 초안 (choi-media 웹 /api/schedules/parse-image 응답과 같은 정의).
+// ---------------------------------------------------------------------------
+
+export type DraftConfidence = "high" | "medium" | "low";
+
+export type DraftEvent = {
+  date: string | null; // YYYY-MM-DD — 못 읽었으면 null
+  title: string;
+  time: string | null; // "HH:mm" 또는 "HH:mm~HH:mm"
+  memo: string | null;
+  confidence: DraftConfidence;
+};
+
+export type ScheduleExtraction = {
+  events: DraftEvent[];
+  notes: string | null;
+  model: string;
+  usage: { input_tokens: number; output_tokens: number };
+  cost_usd: number | null;
+};
+
+export type BulkScheduleRow = {
+  date: string;
+  title: string;
+  memo?: string;
+  /** ISO datetime. null이면 알림 없음. */
+  remindAt: string | null;
+};

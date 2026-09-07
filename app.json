@@ -25,6 +25,13 @@
     "plugins": [
       "@react-native-community/datetimepicker",
       [
+        "expo-image-picker",
+        {
+          "cameraPermission": "일정표를 촬영해 일정을 등록하기 위해 카메라를 사용합니다.",
+          "photosPermission": "일정표 사진을 골라 일정을 등록하기 위해 사진에 접근합니다."
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/android-icon-foreground.png",

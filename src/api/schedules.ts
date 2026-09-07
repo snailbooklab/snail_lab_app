@@ -2,7 +2,7 @@
 // supabase-js로 직접 호출한다 (RLS가 authenticated role만 보므로 로그인한 세션이면 그대로 동작).
 
 import { supabase } from "../lib/supabase";
-import type { RecurringScheduleInput, ScheduleInput, ScheduleItem } from "../types";
+import type { BulkScheduleRow, RecurringScheduleInput, ScheduleInput, ScheduleItem } from "../types";
 
 export async function getSchedules(range?: { from: string; to: string }): Promise<ScheduleItem[]> {
   let query = supabase
@@ -80,6 +80,45 @@ export async function createRecurringSchedules(input: RecurringScheduleInput): P
   }
 
   return { created: rows.length };
+}
+
+/** 같은 일정인지 판단하는 키 — 공백 차이는 무시하고 날짜+제목으로 비교(웹 importLegacyCalendar와 동일). */
+function dedupeKey(date: string, title: string): string {
+  return `${date}|${title.replace(/\s+/g, " ").trim()}`;
+}
+
+/**
+ * 제목이 제각각인 일정 여러 개를 한 번에 넣는다(사진에서 읽은 초안 등록용).
+ * 같은 (날짜+제목)이 이미 DB에 있으면 건너뛴다 — 같은 사진을 두 번 올려도 중복이 안 생긴다.
+ */
+export async function createSchedulesBulk(rows: BulkScheduleRow[]): Promise<{ created: number; skipped: number }> {
+  if (rows.length === 0) return { created: 0, skipped: 0 };
+
+  const dates = rows.map((r) => r.date).sort();
+  const { data: existingRows, error: readError } = await supabase
+    .from("schedules")
+    .select("date, title")
+    .gte("date", dates[0])
+    .lte("date", dates[dates.length - 1]);
+  if (readError) throw new Error(readError.message);
+  const existing = new Set((existingRows ?? []).map((r) => dedupeKey(r.date, r.title)));
+
+  const seen = new Set<string>();
+  const inserts: { date: string; title: string; memo: string | null; remind_at: string | null; remind_sent: boolean }[] = [];
+  for (const r of rows) {
+    const key = dedupeKey(r.date, r.title);
+    if (existing.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    inserts.push({ date: r.date, title: r.title, memo: r.memo || null, remind_at: r.remindAt, remind_sent: false });
+  }
+
+  const CHUNK = 200;
+  for (let i = 0; i < inserts.length; i += CHUNK) {
+    const { error } = await supabase.from("schedules").insert(inserts.slice(i, i + CHUNK));
+    if (error) throw new Error(error.message);
+  }
+
+  return { created: inserts.length, skipped: rows.length - inserts.length };
 }
 
 export async function deleteSchedule(id: string) {

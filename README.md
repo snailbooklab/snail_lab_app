@@ -81,11 +81,27 @@ App.tsx                   # 세션 분기(Login/Calendar), 알림 초기화, App
 src/lib/supabase.ts        # Supabase 클라이언트 (AsyncStorage 세션 저장)
 src/lib/calendar.ts        # 날짜 계산 순수 함수 (choi-media 웹과 동일 로직)
 src/lib/notifications.ts   # 권한/채널/로컬 알림 동기화(syncNotifications), 푸시 토큰 등록
-src/api/schedules.ts       # schedules 테이블 CRUD 쿼리
+src/api/schedules.ts       # schedules 테이블 CRUD 쿼리 (+ 사진 초안 일괄 등록 createSchedulesBulk)
+src/api/parseScheduleImage.ts  # 일정표 사진 → 웹 서버(/api/schedules/parse-image) → Claude 비전 초안
+src/lib/scheduleImages.ts  # 카메라/앨범에서 사진 고르기 + 업로드용 축소(expo-image-picker/manipulator)
+src/screens/PhotoImportSheet.tsx  # 초안 확인·수정·등록 화면
 src/api/pushTokens.ts      # expo_push_tokens upsert
 src/hooks/schedules.ts     # react-query 훅
 src/screens/               # LoginScreen, CalendarScreen
 ```
+
+## 사진으로 일정 추가 (Claude 비전)
+
+메뉴(☰) 또는 날짜 상세 시트의 📷 버튼 → 카메라/앨범에서 일정표 사진(최대 5장)을 고르면
+choi-media 웹의 `/api/schedules/parse-image`가 Claude로 사진을 읽어 일정 **초안 목록**을 돌려준다.
+사진에 일정이 여러 개 섞여 있어도 각각 항목으로 나오고, 형태(표·손글씨·카톡 캡처·공문)는 제한이
+없다. 초안은 그대로 저장되지 않는다 — 항목별로 날짜·제목·시간·메모를 고치고 체크한 것만 "N건
+등록"을 눌러야 `schedules`에 들어간다(같은 날짜+제목이 이미 있으면 건너뜀).
+
+- Anthropic API 키는 웹 서버에만 있다. 앱은 로그인 세션 토큰(Bearer)으로 신원만 증명한다.
+- 사진은 기기에서 긴 변 2000px JPEG로 줄여 보낸다(비용·전송량 절감, 표의 작은 글씨는 유지).
+- 서버 주소는 `EXPO_PUBLIC_WEB_BASE_URL`(비우면 인제스트 엔드포인트의 origin).
+- 모델은 웹 서버의 `ANTHROPIC_VISION_MODEL`(기본 `claude-sonnet-5`)로 바꿀 수 있다.
 
 ## 알아둘 점
 
