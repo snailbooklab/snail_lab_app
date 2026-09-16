@@ -41,6 +41,7 @@ import {
   WEEKDAYS,
 } from "../lib/calendar";
 import WheelPicker from "../components/WheelPicker";
+import { useHolidays } from "../hooks/holidays";
 import {
   useCreateRecurringSchedules,
   useCreateSchedule,
@@ -212,6 +213,9 @@ export default function CalendarScreen({
 
   const [selected, setSelected] = useState(toISO(today));
   const [selYear, selMonth, selDay] = selected.split("-").map(Number);
+
+  // 상세 시트 제목 옆에 붙일 공휴일 이름(예: "9월 25일 (금) 추석").
+  const selectedHoliday = useHolidays(selYear)[selected];
 
   // 날짜 상세 시트에 보여줄 일정 — "지금 보고 있는 달"이 아니라 "선택된 날짜가 속한 달"의 그리드
   // 범위로 조회한다. 예전엔 현재 페이지(pageIndex) 범위를 썼는데, 그러면 pageIndex와 화면에 실제로
@@ -773,7 +777,10 @@ export default function CalendarScreen({
                       <Text style={styles.datePickerCaret}>▾</Text>
                     </Pressable>
                   ) : (
-                    <Text style={styles.sheetTitle}>{fmtSelected(selected)}</Text>
+                    <Text style={styles.sheetTitle}>
+                      {fmtSelected(selected)}
+                      {selectedHoliday ? <Text style={styles.titleHoliday}> {selectedHoliday}</Text> : null}
+                    </Text>
                   )}
                   <Pressable
                     onPress={closeDialog}
@@ -1366,6 +1373,7 @@ function MonthPageView({
   const hasCache = qc.getQueryData(["schedules", from, to]) !== undefined;
   const enabled = isCurrent && (hasCache || isSettled);
   const { data } = useSchedules({ from, to }, { enabled });
+  const holidays = useHolidays(page.year);
   const byDate = useMemo(() => {
     const map = new Map<string, ScheduleItem[]>();
     for (const s of data ?? []) {
@@ -1393,7 +1401,10 @@ function MonthPageView({
             const isSelected = iso === selected;
             const isToday = iso === toISO(today);
             const dow = d.getDay();
+            const holiday = holidays[iso];
             const active = isToday || isSelected;
+            // 공휴일 이름이 한 줄 들어가는 만큼 칸 높이가 모자라지 않게 칩을 하나 줄인다.
+            const maxChips = holiday ? MAX_CHIPS - 1 : MAX_CHIPS;
             return (
               <Pressable
                 key={iso}
@@ -1411,15 +1422,20 @@ function MonthPageView({
                   <Text
                     style={[
                       styles.dayNumberText,
-                      !active && dow === 0 && styles.sunText,
                       !active && dow === 6 && styles.satText,
+                      !active && (dow === 0 || holiday) && styles.sunText,
                       active && styles.dayNumberTextActive,
                     ]}
                   >
                     {d.getDate()}
                   </Text>
                 </View>
-                {events.slice(0, MAX_CHIPS).map((e, i) => {
+                {holiday ? (
+                  <Text numberOfLines={1} style={styles.holidayText}>
+                    {holiday}
+                  </Text>
+                ) : null}
+                {events.slice(0, maxChips).map((e, i) => {
                   const c = CHIP_COLORS[i % CHIP_COLORS.length];
                   return (
                     <View key={e.id} style={[styles.chip, { backgroundColor: c.bg, borderLeftColor: c.border }]}>
@@ -1429,7 +1445,7 @@ function MonthPageView({
                     </View>
                   );
                 })}
-                {events.length > MAX_CHIPS && <Text style={styles.moreText}>+{events.length - MAX_CHIPS}</Text>}
+                {events.length > maxChips && <Text style={styles.moreText}>+{events.length - maxChips}</Text>}
               </Pressable>
             );
           })}
@@ -1514,6 +1530,7 @@ const styles = StyleSheet.create({
   dayNumberSelected: { backgroundColor: "#1f1b16" },
   dayNumberText: { fontSize: 13, fontWeight: "700", color: "#1f1b16" },
   dayNumberTextActive: { color: "#fff" },
+  holidayText: { fontSize: 8.5, fontWeight: "700", color: "#e05b4a", textAlign: "center", marginTop: 1 },
   chip: { borderLeftWidth: 1, borderTopRightRadius: 4, borderBottomRightRadius: 4, paddingLeft: 4, paddingRight: 3, paddingVertical: 2, marginTop: 3 },
   chipText: { fontSize: 9.5, fontWeight: "700" },
   moreText: { fontSize: 9, color: "#a99e88", marginTop: 2, fontWeight: "600", paddingLeft: 2 },
@@ -1584,6 +1601,7 @@ const styles = StyleSheet.create({
   daySwipeArea: { flex: 1 },
   sheetHandle: { alignSelf: "center", width: 44, height: 5, borderRadius: 3, backgroundColor: "#e3d6b8", marginTop: 6, marginBottom: 14 },
   sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
+  titleHoliday: { fontSize: 14, fontWeight: "800", color: "#e05b4a", letterSpacing: -0.3 },
   sheetTitle: { fontSize: 22, fontWeight: "800", color: "#1f1b16", letterSpacing: -0.3 },
   datePickerBtn: {
     flexDirection: "row",
