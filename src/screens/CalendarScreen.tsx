@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Keyboard,
   Modal,
   Pressable,
@@ -16,6 +17,7 @@ import {
 } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
+  cancelAnimation,
   Extrapolation,
   interpolate,
   runOnJS,
@@ -87,7 +89,25 @@ export default function CalendarScreen({
 }) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
-  const today = useMemo(() => new Date(), []);
+  // 앱을 끄지 않고 백그라운드에 둔 채 날짜(특히 달)가 바뀌면 "오늘"이 옛날 값에 머물러, 10월인데
+  // 달력/오늘 버튼이 9월을 가리키는 문제가 있었다. 포그라운드 복귀 때와 자정에 다시 계산한다.
+  const [today, setToday] = useState(() => new Date());
+  useEffect(() => {
+    const refresh = () => {
+      const now = new Date();
+      setToday((prev) => (toISO(prev) === toISO(now) ? prev : now));
+    };
+    const sub = AppState.addEventListener("change", (s) => {
+      if (s === "active") refresh();
+    });
+    const now = new Date();
+    const msToMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime();
+    const timer = setTimeout(refresh, msToMidnight + 1000);
+    return () => {
+      sub.remove();
+      clearTimeout(timer);
+    };
+  }, [today]);
 
   // 오늘에서 EARLIEST_YEAR/MONTH까지 몇 달을 거슬러 올라가야 하는지 = 과거 쪽 페이지 수.
   const monthsBefore = useMemo(() => {
@@ -145,11 +165,14 @@ export default function CalendarScreen({
   // 사라진다 — pageIndex는 헤더 제목/데이터 페칭처럼 화면에 보이지 않는 용도로만 쓴다.
   const scrollY = useSharedValue(0);
   const startScrollY = useSharedValue(0);
-  const scrollYSeeded = useRef(false);
+  // gridHeight가 바뀔 때마다(처음 한 번만이 아니라) scrollY를 다시 맞춘다. scrollY는 px 단위라
+  // 페이지 높이가 조금만 바뀌어도(네비바/인셋 반영, 회전 등으로 onLayout이 다시 오는 경우) 오차가
+  // pageIndex배로 커진다 — 2024년 1월부터 30여 페이지가 쌓인 지금은 몇 px 차이로도 한 달 이상
+  // 밀려서, 헤더는 9월인데 그리드는 10월이 보이는 식으로 어긋났다.
   useEffect(() => {
-    if (gridHeight > 0 && !scrollYSeeded.current) {
+    if (gridHeight > 0) {
+      cancelAnimation(scrollY);
       scrollY.value = pageIndex * gridHeight;
-      scrollYSeeded.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gridHeight]);
@@ -312,6 +335,18 @@ export default function CalendarScreen({
     setPageIndex(monthsBefore);
     scrollY.value = monthsBefore * gridHeight;
   }
+
+  // 날짜가 바뀌어 today가 갱신되면 달력을 새 오늘로 옮긴다. 페이지는 항상 EARLIEST_YEAR/MONTH부터
+  // 시작하므로 달이 바뀌어도 기존 인덱스는 그대로고 끝에 한 달이 붙을 뿐이다.
+  const todayIso = toISO(today);
+  const prevTodayIso = useRef(todayIso);
+  useEffect(() => {
+    if (prevTodayIso.current === todayIso) return;
+    prevTodayIso.current = todayIso;
+    setSelected(todayIso);
+    goToToday();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayIso]);
 
   // 헤더 제목을 눌러 여는 년/월 점프 — 2024년 1월까지 30번 넘기지 않아도 되게. 휠(스크롤로
   // 값 확정)이 아니라 달을 직접 탭하면 바로 이동하는 그리드다 — 고른 값이 반영됐는지 헷갈릴
