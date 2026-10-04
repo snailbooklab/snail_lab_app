@@ -3,11 +3,16 @@
 "use no memo";
 
 import { FlexWidget, TextWidget } from "react-native-android-widget";
-import { WEEKDAYS } from "../lib/calendar";
-import type { WidgetSchedule } from "./storage";
+import { addDaysIso, WEEKDAYS } from "../lib/calendar";
+import { clampWidgetDate, type WidgetSchedule } from "./storage";
 
 /** app.json의 위젯 정의(name)와 반드시 같아야 한다 — 네이티브가 이 이름으로 태스크를 호출한다. */
 export const WIDGET_NAME = "TodaySchedule";
+
+/** ‹ › 버튼 클릭 액션 — clickActionData.delta(+1/-1)만큼 날짜를 옮긴다. widgetTaskHandler 참고. */
+export const SHIFT_DAY_ACTION = "SHIFT_DAY";
+/** 날짜(헤더 왼쪽)를 누르면 오늘로 돌아간다. */
+export const GO_TODAY_ACTION = "GO_TODAY";
 
 // 갤럭시 One UI 위젯처럼 배경화면이 은은하게 비치는 반투명 카드. 너무 투명하면 사진 배경 위에서
 // 글자가 묻히므로 라이트는 흰색 72%, 다크는 거의 검정 62% 정도로 깔아 가독성을 지킨다.
@@ -17,7 +22,7 @@ const THEME = {
     text: "#111111",
     muted: "#6b6b6b",
     accent: "#ef5b2b",
-    pill: "rgba(239, 91, 43, 0.14)",
+    button: "rgba(0, 0, 0, 0.06)",
     bars: ["#ef5b2b", "#3b82f6", "#22a35a"],
   },
   dark: {
@@ -25,7 +30,7 @@ const THEME = {
     text: "#f5f5f5",
     muted: "#a3a3a3",
     accent: "#ff8256",
-    pill: "rgba(255, 130, 86, 0.22)",
+    button: "rgba(255, 255, 255, 0.12)",
     bars: ["#ff8256", "#60a5fa", "#4ade80"],
   },
 } as const;
@@ -36,8 +41,10 @@ const HEADER_HEIGHT = 50;
 const ROW_HEIGHT = 24;
 
 export type TodayScheduleWidgetProps = {
-  /** 오늘 날짜(YYYY-MM-DD) — 렌더링 시점에 계산해서 넘긴다. */
+  /** 위젯에 보여줄 날짜(YYYY-MM-DD) — ‹ › 버튼으로 오늘에서 옮겨갈 수 있다. */
   date: string;
+  /** 오늘 날짜(YYYY-MM-DD) — 렌더링 시점에 계산해서 넘긴다. */
+  today: string;
   schedules: WidgetSchedule[];
   /** 위젯 높이(dp) — 몇 줄까지 그릴지 결정한다. */
   height: number;
@@ -48,15 +55,52 @@ function visibleRowCount(height: number): number {
   return Math.max(1, Math.floor((height - HEADER_HEIGHT) / ROW_HEIGHT));
 }
 
-export function TodayScheduleWidget({ date, schedules, height }: TodayScheduleWidgetProps) {
+/** 오늘 기준 상대 날짜 라벨 — "오늘", "내일", "3일 후" 등. */
+function relativeLabel(date: string, today: string): string {
+  const diff = Math.round(
+    (new Date(`${date}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / 86400000,
+  );
+  if (diff === 0) return "오늘";
+  if (diff === 1) return "내일";
+  if (diff === 2) return "모레";
+  if (diff === -1) return "어제";
+  return diff > 0 ? `${diff}일 후` : `${-diff}일 전`;
+}
+
+export function TodayScheduleWidget(props: TodayScheduleWidgetProps) {
   return {
-    light: <WidgetBody date={date} schedules={schedules} height={height} theme={THEME.light} />,
-    dark: <WidgetBody date={date} schedules={schedules} height={height} theme={THEME.dark} />,
+    light: <WidgetBody {...props} theme={THEME.light} />,
+    dark: <WidgetBody {...props} theme={THEME.dark} />,
   };
+}
+
+function NavButton({ label, delta, enabled, theme }: { label: string; delta: number; enabled: boolean; theme: Theme }) {
+  return (
+    <FlexWidget
+      clickAction={enabled ? SHIFT_DAY_ACTION : undefined}
+      clickActionData={enabled ? { delta } : undefined}
+      accessibilityLabel={delta < 0 ? "전날" : "다음날"}
+      style={{
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: theme.button,
+        alignItems: "center",
+        justifyContent: "center",
+        marginLeft: 6,
+      }}
+    >
+      <TextWidget
+        text={label}
+        style={{ fontSize: 18, fontWeight: "700", color: enabled ? theme.text : theme.muted }}
+      />
+    </FlexWidget>
+  );
 }
 
 function WidgetBody({
   date,
+  today,
   schedules,
   height,
   theme,
@@ -67,11 +111,14 @@ function WidgetBody({
   const shown = overflows ? schedules.slice(0, rows - 1) : schedules;
   const hiddenCount = schedules.length - shown.length;
   const d = new Date(`${date}T00:00:00`);
+  const isToday = date === today;
+  const canPrev = clampWidgetDate(addDaysIso(date, -1), today) !== date;
+  const canNext = clampWidgetDate(addDaysIso(date, 1), today) !== date;
 
   return (
     <FlexWidget
       clickAction="OPEN_APP"
-      accessibilityLabel={`오늘 일정 ${schedules.length}건`}
+      accessibilityLabel={`${relativeLabel(date, today)} 일정 ${schedules.length}건`}
       style={{
         height: "match_parent",
         width: "match_parent",
@@ -82,7 +129,7 @@ function WidgetBody({
         flexDirection: "column",
       }}
     >
-      {/* 헤더: 큰 날짜 숫자 + 요일/월, 오른쪽에 건수 알약 */}
+      {/* 헤더: 큰 날짜 숫자 + 요일/월(누르면 오늘로), 오른쪽에 ‹ › 날짜 이동 버튼 */}
       <FlexWidget
         style={{
           width: "match_parent",
@@ -91,31 +138,33 @@ function WidgetBody({
           marginBottom: 8,
         }}
       >
-        <TextWidget
-          text={String(d.getDate())}
-          style={{ fontSize: 28, fontWeight: "700", color: theme.text, marginRight: 8 }}
-        />
-        <FlexWidget style={{ flexDirection: "column", flex: 1 }}>
+        <FlexWidget
+          clickAction={isToday ? undefined : GO_TODAY_ACTION}
+          style={{ flexDirection: "row", alignItems: "center", flex: 1 }}
+        >
           <TextWidget
-            text={`${WEEKDAYS[d.getDay()]}요일`}
-            style={{ fontSize: 12, fontWeight: "700", color: theme.accent }}
+            text={String(d.getDate())}
+            style={{ fontSize: 28, fontWeight: "700", color: theme.text, marginRight: 8 }}
           />
-          <TextWidget text={`${d.getMonth() + 1}월`} style={{ fontSize: 12, color: theme.muted }} />
-        </FlexWidget>
-        {schedules.length > 0 ? (
-          <FlexWidget
-            style={{ backgroundColor: theme.pill, borderRadius: 12, paddingHorizontal: 9, paddingVertical: 3 }}
-          >
+          <FlexWidget style={{ flexDirection: "column" }}>
             <TextWidget
-              text={`${schedules.length}건`}
-              style={{ fontSize: 12, fontWeight: "700", color: theme.accent }}
+              text={`${WEEKDAYS[d.getDay()]}요일 · ${relativeLabel(date, today)}`}
+              maxLines={1}
+              style={{ fontSize: 12, fontWeight: "700", color: isToday ? theme.accent : theme.text }}
+            />
+            <TextWidget
+              text={schedules.length > 0 ? `${d.getMonth() + 1}월 · 일정 ${schedules.length}건` : `${d.getMonth() + 1}월`}
+              maxLines={1}
+              style={{ fontSize: 12, color: theme.muted }}
             />
           </FlexWidget>
-        ) : null}
+        </FlexWidget>
+        <NavButton label="‹" delta={-1} enabled={canPrev} theme={theme} />
+        <NavButton label="›" delta={1} enabled={canNext} theme={theme} />
       </FlexWidget>
 
       {schedules.length === 0 ? (
-        <TextWidget text="오늘은 일정이 없어요" style={{ fontSize: 13, color: theme.muted }} />
+        <TextWidget text={isToday ? "오늘은 일정이 없어요" : "일정이 없어요"} style={{ fontSize: 13, color: theme.muted }} />
       ) : (
         <FlexWidget style={{ width: "match_parent", flexDirection: "column" }}>
           {shown.map((s, i) => (

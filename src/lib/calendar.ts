@@ -10,6 +10,12 @@ export function toISO(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** YYYY-MM-DD에 n일을 더한 날짜(YYYY-MM-DD). 로컬 기준이라 서머타임 등에도 날짜가 밀리지 않는다. */
+export function addDaysIso(iso: string, n: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return toISO(new Date(y, m - 1, d + n));
+}
+
 /** date input 값 검증 — 잘못된/불완전한 값을 걸러낸다. */
 export function isValidIsoDate(v: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
