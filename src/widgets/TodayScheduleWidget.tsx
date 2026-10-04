@@ -22,6 +22,7 @@ const THEME = {
     text: "#111111",
     muted: "#6b6b6b",
     accent: "#ef5b2b",
+    holiday: "#e05b4a",
     button: "rgba(0, 0, 0, 0.06)",
     bars: ["#ef5b2b", "#3b82f6", "#22a35a"],
   },
@@ -30,6 +31,7 @@ const THEME = {
     text: "#f5f5f5",
     muted: "#a3a3a3",
     accent: "#ff8256",
+    holiday: "#ff7a6b",
     button: "rgba(255, 255, 255, 0.12)",
     bars: ["#ff8256", "#60a5fa", "#4ade80"],
   },
@@ -45,6 +47,8 @@ export type TodayScheduleWidgetProps = {
   date: string;
   /** 오늘 날짜(YYYY-MM-DD) — 렌더링 시점에 계산해서 넘긴다. */
   today: string;
+  /** date가 공휴일이면 그 이름("대체공휴일", "한글날" 등). */
+  holiday?: string;
   schedules: WidgetSchedule[];
   /** 위젯 높이(dp) — 몇 줄까지 그릴지 결정한다. */
   height: number;
@@ -101,6 +105,7 @@ function NavButton({ label, delta, enabled, theme }: { label: string; delta: num
 function WidgetBody({
   date,
   today,
+  holiday,
   schedules,
   height,
   theme,
@@ -114,6 +119,11 @@ function WidgetBody({
   const isToday = date === today;
   const canPrev = clampWidgetDate(addDaysIso(date, -1), today) !== date;
   const canNext = clampWidgetDate(addDaysIso(date, 1), today) !== date;
+  // 달력과 같이 일요일·공휴일은 빨간 날로.
+  const isRedDay = d.getDay() === 0 || !!holiday;
+  const subParts = [`${d.getMonth() + 1}월`];
+  if (holiday) subParts.push(holiday);
+  if (schedules.length > 0) subParts.push(`일정 ${schedules.length}건`);
 
   return (
     <FlexWidget
@@ -135,16 +145,19 @@ function WidgetBody({
           width: "match_parent",
           flexDirection: "row",
           alignItems: "center",
+          justifyContent: "space-between",
           marginBottom: 8,
         }}
       >
+        {/* flex(weight) 대신 space-between으로 양쪽을 나눈다 — weight로 늘린 왼쪽 덩어리가
+            버튼 자리까지 밀어내 오른쪽 여백이 사라지는 경우가 있었다. */}
         <FlexWidget
           clickAction={isToday ? undefined : GO_TODAY_ACTION}
-          style={{ flexDirection: "row", alignItems: "center", flex: 1 }}
+          style={{ flexDirection: "row", alignItems: "center" }}
         >
           <TextWidget
             text={String(d.getDate())}
-            style={{ fontSize: 28, fontWeight: "700", color: theme.text, marginRight: 8 }}
+            style={{ fontSize: 28, fontWeight: "700", color: isRedDay ? theme.holiday : theme.text, marginRight: 8 }}
           />
           <FlexWidget style={{ flexDirection: "column" }}>
             <TextWidget
@@ -153,18 +166,28 @@ function WidgetBody({
               style={{ fontSize: 12, fontWeight: "700", color: isToday ? theme.accent : theme.text }}
             />
             <TextWidget
-              text={schedules.length > 0 ? `${d.getMonth() + 1}월 · 일정 ${schedules.length}건` : `${d.getMonth() + 1}월`}
+              text={subParts.join(" · ")}
               maxLines={1}
-              style={{ fontSize: 12, color: theme.muted }}
+              style={{ fontSize: 12, color: holiday ? theme.holiday : theme.muted }}
             />
           </FlexWidget>
         </FlexWidget>
-        <NavButton label="‹" delta={-1} enabled={canPrev} theme={theme} />
-        <NavButton label="›" delta={1} enabled={canNext} theme={theme} />
+        <FlexWidget style={{ flexDirection: "row", alignItems: "center" }}>
+          <NavButton label="‹" delta={-1} enabled={canPrev} theme={theme} />
+          <NavButton label="›" delta={1} enabled={canNext} theme={theme} />
+        </FlexWidget>
       </FlexWidget>
 
       {schedules.length === 0 ? (
-        <TextWidget text={isToday ? "오늘은 일정이 없어요" : "일정이 없어요"} style={{ fontSize: 13, color: theme.muted }} />
+        // 위젯이 큰데(특히 잠금화면) 위쪽에 한 줄만 있으면 휑하므로 남은 공간 가운데에 둔다.
+        <FlexWidget
+          style={{ width: "match_parent", flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 18 }}
+        >
+          <TextWidget
+            text={isToday ? "오늘은 일정이 없어요" : "일정이 없어요"}
+            style={{ fontSize: 13, color: theme.muted }}
+          />
+        </FlexWidget>
       ) : (
         <FlexWidget style={{ width: "match_parent", flexDirection: "column" }}>
           {shown.map((s, i) => (
