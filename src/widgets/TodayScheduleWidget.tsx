@@ -9,15 +9,30 @@ import type { WidgetSchedule } from "./storage";
 /** app.json의 위젯 정의(name)와 반드시 같아야 한다 — 네이티브가 이 이름으로 태스크를 호출한다. */
 export const WIDGET_NAME = "TodaySchedule";
 
-// 잠금화면 배경(사진) 위에 얹힐 수 있으므로 카드 배경을 불투명하게 깔아 가독성을 확보한다.
+// 갤럭시 One UI 위젯처럼 배경화면이 은은하게 비치는 반투명 카드. 너무 투명하면 사진 배경 위에서
+// 글자가 묻히므로 라이트는 흰색 72%, 다크는 거의 검정 62% 정도로 깔아 가독성을 지킨다.
 const THEME = {
-  light: { card: "#fdf8f0", text: "#1f1b16", muted: "#8c8375", accent: "#ef5b2b", rule: "#e8dcc4" },
-  dark: { card: "#241f1a", text: "#f7f1e6", muted: "#a99f8d", accent: "#ff8256", rule: "#3d352b" },
+  light: {
+    card: "rgba(255, 255, 255, 0.72)",
+    text: "#111111",
+    muted: "#6b6b6b",
+    accent: "#ef5b2b",
+    pill: "rgba(239, 91, 43, 0.14)",
+    bars: ["#ef5b2b", "#3b82f6", "#22a35a"],
+  },
+  dark: {
+    card: "rgba(20, 20, 22, 0.62)",
+    text: "#f5f5f5",
+    muted: "#a3a3a3",
+    accent: "#ff8256",
+    pill: "rgba(255, 130, 86, 0.22)",
+    bars: ["#ff8256", "#60a5fa", "#4ade80"],
+  },
 } as const;
 
 type Theme = (typeof THEME)[keyof typeof THEME];
 
-const HEADER_HEIGHT = 34;
+const HEADER_HEIGHT = 50;
 const ROW_HEIGHT = 24;
 
 export type TodayScheduleWidgetProps = {
@@ -31,11 +46,6 @@ export type TodayScheduleWidgetProps = {
 /** 위젯 높이에 맞춰 표시할 줄 수. 최소 1줄은 보장한다. */
 function visibleRowCount(height: number): number {
   return Math.max(1, Math.floor((height - HEADER_HEIGHT) / ROW_HEIGHT));
-}
-
-function formatDate(date: string): string {
-  const d = new Date(`${date}T00:00:00`);
-  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAYS[d.getDay()]})`;
 }
 
 export function TodayScheduleWidget({ date, schedules, height }: TodayScheduleWidgetProps) {
@@ -56,6 +66,7 @@ function WidgetBody({
   const overflows = schedules.length > rows;
   const shown = overflows ? schedules.slice(0, rows - 1) : schedules;
   const hiddenCount = schedules.length - shown.length;
+  const d = new Date(`${date}T00:00:00`);
 
   return (
     <FlexWidget
@@ -65,51 +76,74 @@ function WidgetBody({
         height: "match_parent",
         width: "match_parent",
         backgroundColor: theme.card,
-        borderRadius: 20,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
+        borderRadius: 26,
+        paddingHorizontal: 18,
+        paddingVertical: 14,
         flexDirection: "column",
       }}
     >
+      {/* 헤더: 큰 날짜 숫자 + 요일/월, 오른쪽에 건수 알약 */}
       <FlexWidget
         style={{
           width: "match_parent",
           flexDirection: "row",
           alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 6,
+          marginBottom: 8,
         }}
       >
         <TextWidget
-          text={formatDate(date)}
-          maxLines={1}
-          style={{ fontSize: 14, fontWeight: "700", color: theme.text }}
+          text={String(d.getDate())}
+          style={{ fontSize: 28, fontWeight: "700", color: theme.text, marginRight: 8 }}
         />
-        <TextWidget
-          text={schedules.length > 0 ? `${schedules.length}건` : ""}
-          style={{ fontSize: 12, fontWeight: "600", color: theme.accent }}
-        />
+        <FlexWidget style={{ flexDirection: "column", flex: 1 }}>
+          <TextWidget
+            text={`${WEEKDAYS[d.getDay()]}요일`}
+            style={{ fontSize: 12, fontWeight: "700", color: theme.accent }}
+          />
+          <TextWidget text={`${d.getMonth() + 1}월`} style={{ fontSize: 12, color: theme.muted }} />
+        </FlexWidget>
+        {schedules.length > 0 ? (
+          <FlexWidget
+            style={{ backgroundColor: theme.pill, borderRadius: 12, paddingHorizontal: 9, paddingVertical: 3 }}
+          >
+            <TextWidget
+              text={`${schedules.length}건`}
+              style={{ fontSize: 12, fontWeight: "700", color: theme.accent }}
+            />
+          </FlexWidget>
+        ) : null}
       </FlexWidget>
 
-      <FlexWidget style={{ width: "match_parent", height: 1, backgroundColor: theme.rule, marginBottom: 6 }} />
-
       {schedules.length === 0 ? (
-        <TextWidget text="오늘 일정 없음" style={{ fontSize: 13, color: theme.muted }} />
+        <TextWidget text="오늘은 일정이 없어요" style={{ fontSize: 13, color: theme.muted }} />
       ) : (
         <FlexWidget style={{ width: "match_parent", flexDirection: "column" }}>
-          {shown.map((s) => (
-            <TextWidget
+          {shown.map((s, i) => (
+            <FlexWidget
               key={s.id}
-              text={`· ${s.title}`}
-              maxLines={1}
-              truncate="END"
-              style={{ fontSize: 13, color: theme.text, marginBottom: 3 }}
-            />
+              style={{ width: "match_parent", flexDirection: "row", alignItems: "center", marginBottom: 6 }}
+            >
+              <FlexWidget
+                style={{
+                  width: 3,
+                  height: 14,
+                  borderRadius: 2,
+                  backgroundColor: theme.bars[i % theme.bars.length],
+                  marginRight: 8,
+                }}
+              />
+              <TextWidget
+                text={s.title}
+                maxLines={1}
+                truncate="END"
+                style={{ fontSize: 13, color: theme.text }}
+              />
+            </FlexWidget>
           ))}
           {hiddenCount > 0 ? (
             <TextWidget
               text={`+${hiddenCount}건 더`}
-              style={{ fontSize: 12, color: theme.muted }}
+              style={{ fontSize: 12, color: theme.muted, marginLeft: 11 }}
             />
           ) : null}
         </FlexWidget>
